@@ -126,18 +126,21 @@ const App: React.FC = () => {
     return machines.filter(m => m.area === selectedArea);
   }, [machines, selectedArea]);
 
-  const factoryStats = useMemo(() => {
-    const running = machines.filter(m => m.status === MachineStatus.RUNNING).length;
-    const stopped = machines.filter(m => 
+  const statsBySelectedArea = useMemo(() => {
+    // Luôn tính toán dựa trên `filteredMachines` để con số khớp với khu vực đang chọn
+    const targetMachines = filteredMachines;
+    
+    const running = targetMachines.filter(m => m.status === MachineStatus.RUNNING).length;
+    const stopped = targetMachines.filter(m => 
       m.status === MachineStatus.STOPPED && !PLANNED_REASONS.includes(m.currentDowntimeReason || '')
     ).length;
     
-    const noOrder = machines.filter(m => 
+    const noOrder = targetMachines.filter(m => 
       m.status === MachineStatus.STOPPED && PLANNED_REASONS.includes(m.currentDowntimeReason || '')
     ).length;
     
-    return { total: machines.length, running, stopped, noOrder };
-  }, [machines]);
+    return { total: targetMachines.length, running, stopped, noOrder };
+  }, [filteredMachines]);
 
   const handleUpdateMachineStatus = (machineId: string, status: MachineStatus, reason?: string) => {
     setMachines(prev => prev.map(m => m.id === machineId ? { ...m, status, currentDowntimeReason: reason } : m));
@@ -177,15 +180,11 @@ const App: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      // Tách mã máy bằng xuống dòng, phẩy, chấm phẩy hoặc tab
       const codesFromFile = text
         .split(/[\r\n,;\t]+/)
         .map(c => c.trim().toUpperCase())
         .filter(c => c.length > 0);
       
-      console.log('Mã máy nhận diện từ file:', codesFromFile);
-      
-      // Lấy danh sách ID của các máy ĐANG CHẠY có mã nằm trong file
       const matchMachineIds = machines
         .filter(m => 
           m.status === MachineStatus.RUNNING && 
@@ -194,19 +193,16 @@ const App: React.FC = () => {
         .map(m => m.id);
 
       if (matchMachineIds.length > 0) {
-        // Cập nhật state selectedMachineIds để tick các máy này ngay lập tức
         setSelectedMachineIds(prev => {
           const newSelection = new Set([...prev, ...matchMachineIds]);
           return Array.from(newSelection);
         });
         alert(`Thành công! Đã tự động nhận diện và TICK ${matchMachineIds.length} máy từ danh sách của bạn.`);
       } else {
-        alert("Lưu ý: Không tìm thấy mã máy nào trong file khớp với các máy ĐANG CHẠY hiện tại. Vui lòng kiểm tra lại mã máy trong file.");
+        alert("Lưu ý: Không tìm thấy mã máy nào trong file khớp với các máy ĐANG CHẠY hiện tại.");
       }
     };
     reader.readAsText(file);
-    
-    // Reset input file để có thể chọn lại cùng 1 file nếu cần
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -226,7 +222,7 @@ const App: React.FC = () => {
                   {showHistory ? 'Lịch Sử Gián Đoạn' : (selectedArea === 'ALL' ? 'Toàn Nhà Máy' : `Khu Vực ${selectedArea}`)}
                 </span>
               </h1>
-              <p className="text-slate-500 text-sm font-medium">Hệ thống giám sát đa khu vực</p>
+              <p className="text-slate-500 text-sm font-medium">Giám sát {selectedArea === 'ALL' ? 'tổng quát' : `khu vực ${selectedArea}`}</p>
             </div>
             {!showHistory && (
               <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
@@ -258,10 +254,10 @@ const App: React.FC = () => {
           {!showHistory && (
             <div className="flex items-center gap-3 overflow-x-auto pb-2 xl:pb-0">
               {[
-                { label: 'Tổng Máy', val: factoryStats.total, color: 'slate' },
-                { label: 'Tổng Chạy', val: factoryStats.running, color: 'green' },
-                { label: 'Tổng Lỗi', val: factoryStats.stopped, color: 'red' },
-                { label: 'Dừng KH', val: factoryStats.noOrder, color: 'blue' }
+                { label: 'Tổng Máy', val: statsBySelectedArea.total, color: 'slate' },
+                { label: 'Đang Chạy', val: statsBySelectedArea.running, color: 'green' },
+                { label: 'Sự Cố', val: statsBySelectedArea.stopped, color: 'red' },
+                { label: 'Dừng KH', val: statsBySelectedArea.noOrder, color: 'blue' }
               ].map(stat => (
                 <div key={stat.label} className={`bg-${stat.color}-50 px-4 py-2 rounded-xl text-center border border-${stat.color}-100 min-w-[100px]`}>
                   <p className={`text-[10px] font-bold text-${stat.color}-600 uppercase`}>{stat.label}</p>
@@ -355,13 +351,6 @@ const App: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                
-                {machines.filter(m => m.status === MachineStatus.RUNNING).length === 0 && (
-                  <div className="py-20 text-center text-slate-400">
-                    <p className="text-4xl mb-2">🏖️</p>
-                    <p className="text-xs font-black uppercase tracking-widest">Không có máy nào đang chạy</p>
-                  </div>
-                )}
               </div>
 
               <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
